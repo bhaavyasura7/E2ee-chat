@@ -1,0 +1,175 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+body {
+  background-color: #f0f2f5;
+  color: #1c1e21;
+}
+
+#root {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+}
+
+.login-container {
+  background: white;
+  padding: 40px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  text-align: center;
+}
+
+.login-container h1 {
+  margin-bottom: 20px;
+  color: #1877f2;
+}
+
+.login-container input {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 15px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 16px;
+}
+
+.login-container button {
+  width: 100%;
+  padding: 12px;
+  background-color: #1877f2;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 16px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.chat-container {
+  background: white;
+  width: 500px;
+  height: 80vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  overflow: hidden;
+}
+
+header {
+  background: #1877f2;
+  color: white;
+  padding: 15px;
+  text-align: center;
+}
+
+.key-display {
+  margin-top: 5px;
+  opacity: 0.8;
+  font-family: monospace;
+}
+
+.connection-setup {
+  padding: 15px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #eee;
+}
+
+.connection-setup h3 {
+  font-size: 14px;
+  margin-bottom: 10px;
+  color: #666;
+}
+
+.connection-setup input, .connection-setup textarea {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.connection-setup textarea {
+  font-family: monospace;
+  font-size: 12px;
+  resize: none;
+}
+
+.messages-area {
+  flex: 1;
+  padding: 15px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #efeae2;
+}
+
+.message {
+  max-width: 80%;
+  padding: 10px 14px;
+  border-radius: 15px;
+  line-height: 1.4;
+  word-wrap: break-word;
+}
+
+.message.me {
+  align-self: flex-end;
+  background: #dcf8c6;
+  border-bottom-right-radius: 4px;
+}
+
+.message.them {
+  align-self: flex-start;
+  background: white;
+  border-bottom-left-radius: 4px;
+}
+
+.message strong {
+  display: block;
+  font-size: 11px;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.message.error {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.compose-area {
+  display: flex;
+  padding: 15px;
+  background: #f0f2f5;
+  border-top: 1px solid #ccc;
+}
+
+.compose-area input {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  border-radius: 20px;
+  outline: none;
+}
+
+.compose-area button {
+  margin-left: 10px;
+  padding: 0 20px;
+  background: #1877f2;
+  color: white;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+}
+
+.compose-area button:disabled {
+  background: #abc9f2;
+  cursor: not-allowed;
+}

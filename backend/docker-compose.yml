@@ -1,0 +1,32 @@
+version: "3.8"
+
+services:
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+
+  mongo:
+    image: mongo
+    ports:
+      - "27018:27017"
+
+  api:
+    build: ./api
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - REDIS_HOST=redis
+    depends_on:
+      - redis
+      - mongo
+
+  worker:
+    build: ./worker
+    environment:
+      - REDIS_HOST=redis
+      - MONGO_URI=mongodb://mongo:27017/chat
+    depends_on:
+      - redis
+      - mongo
