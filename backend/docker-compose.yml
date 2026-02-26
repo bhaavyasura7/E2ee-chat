@@ -13,17 +13,22 @@ services:
       - "27018:27017"
 
   api:
-    build: ./api
+    build:
+      context: .
+      dockerfile: Dockerfile.api
     ports:
       - "127.0.0.1:3000:3000"
     environment:
       - REDIS_HOST=redis
+      - MONGO_URI=mongodb://mongo:27017/chat
     depends_on:
       - redis
       - mongo
 
   worker:
-    build: ./worker
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
     environment:
       - REDIS_HOST=redis
       - MONGO_URI=mongodb://mongo:27017/chat

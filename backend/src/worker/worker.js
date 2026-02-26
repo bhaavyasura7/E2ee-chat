@@ -1,6 +1,6 @@
 const { Worker } = require("bullmq");
 const mongoose = require("mongoose");
-const Message = require("./message.model");
+const Message = require("../models/message.model");
 
 const mongoUri = process.env.MONGO_URI || "mongodb://localhost:27017/chat";
 mongoose.connect(mongoUri)
@@ -13,8 +13,13 @@ const redisOptions = {
 };
 
 const worker = new Worker("messages", async job => {
-    await Message.create(job.data);
-    console.log("Message stored in DB");
+    if (job.name === "storeMessage") {
+        await Message.create(job.data);
+        console.log(`Message ${job.data.messageId} stored in DB`);
+    } else if (job.name === "updateStatus") {
+        await Message.updateOne({ messageId: job.data.messageId }, { status: job.data.status });
+        console.log(`Message ${job.data.messageId} status updated to ${job.data.status}`);
+    }
 }, { connection: redisOptions });
 
 worker.on("completed", job => {
