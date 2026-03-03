@@ -1,176 +1,142 @@
-/**
- * Sidebar.jsx — WeChat-inspired sidebar with last-message preview, timestamps, online dot
+﻿/**
+ * Sidebar.jsx ΓÇö left panel with settings gear, avatar with photo, search, groups, DMs
  */
 import { useState } from 'react';
 import ProfileViewer from './ProfileViewer';
 
 export default function Sidebar({
-    displayName, userId, profilePic, contactProfiles, lastMessages,
+    displayName, userId, profilePic, contactProfiles,
     onLogout, onOpenSettings,
     newChatUser, setNewChatUser, onStartDirectChat,
     groups, activeChatType, activeGroupId, onSelectGroup,
     contacts, receiverId, isReceiverOnline, onSelectContact,
     unreadCounts, onCreateGroup,
 }) {
-    const [viewProfile, setViewProfile] = useState(null);
+    const [viewProfile, setViewProfile] = useState(null); // { name, pic }
 
     return (
         <>
             <div className="sidebar">
                 {/* Header */}
                 <div className="sidebar-header">
+                    {/* Own avatar ΓåÆ opens settings */}
                     <div className="user-info" onClick={onOpenSettings} title="Settings">
-                        <div className="avatar-wrap">
-                            <Avatar name={displayName || userId} pic={profilePic} size={40} />
-                        </div>
-                        <span className="username">{displayName || userId}</span>
+                        <Avatar name={displayName || userId} pic={profilePic} size={40} />
+                        <span style={{ color: 'var(--text-primary)', fontSize: '15px' }}>{displayName || userId}</span>
                     </div>
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                        <IconBtn title="Settings" onClick={onOpenSettings}>⚙️</IconBtn>
-                        <IconBtn title="Logout" onClick={onLogout}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
-                            </svg>
-                        </IconBtn>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <button
+                            onClick={onOpenSettings}
+                            title="Settings"
+                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '20px', lineHeight: 1 }}
+                        >ΓÜÖ∩╕Å</button>
+                        <button
+                            onClick={onLogout}
+                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '14px', fontWeight: '500' }}
+                        >
+                            Logout
+                        </button>
                     </div>
                 </div>
 
-                {/* Search */}
+                {/* Search / New Chat */}
                 <div className="search-bar">
                     <form onSubmit={onStartDirectChat}>
                         <input
                             type="text"
-                            placeholder="🔍  Search exact username to start chat…"
+                            placeholder="≡ƒöì  Search by exact username..."
                             value={newChatUser}
-                            onChange={e => setNewChatUser(e.target.value.toLowerCase())}
+                            onChange={(e) => setNewChatUser(e.target.value.toLowerCase())}
                         />
+                        <button type="submit" style={{ display: 'none' }}>Search</button>
                     </form>
                 </div>
 
                 <div className="chat-list">
-                    {/* ── Groups ── */}
-                    <div className="section-label">
-                        Groups
-                        <span className="new-btn" onClick={onCreateGroup}>+ New</span>
+                    {/* Groups */}
+                    <div style={{ padding: '10px 15px', color: 'var(--accent)', fontSize: '12px', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between' }}>
+                        GROUPS <span style={{ cursor: 'pointer' }} onClick={onCreateGroup}>+ New</span>
                     </div>
-
-                    {groups.length === 0 && (
-                        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', padding: '6px 20px' }}>No groups yet</p>
-                    )}
-
                     {groups.map(g => {
-                        const unread = unreadCounts[g.groupId] || 0;
-                        const last = lastMessages?.[g.groupId];
-                        const isActive = activeChatType === 'group' && activeGroupId === g.groupId;
+                        const gUnread = unreadCounts[g.groupId] || 0;
                         return (
-                            <div key={g.groupId} className={`chat-item ${isActive ? 'active' : ''}`} onClick={() => onSelectGroup(g)}>
-                                <div className="avatar-wrap">
-                                    <div className="avatar" style={{ width: 46, height: 46, fontSize: 19, background: 'linear-gradient(135deg,#1d7bff,#6b48ff)', color: '#fff' }}>
-                                        {g.name.charAt(0).toUpperCase()}
-                                    </div>
-                                </div>
+                            <div
+                                key={g.groupId}
+                                className={`chat-item ${activeChatType === 'group' && activeGroupId === g.groupId ? 'active' : ''}`}
+                                onClick={() => onSelectGroup(g)}
+                            >
+                                <div className="avatar" style={{ background: 'linear-gradient(135deg, #00a884, #007a62)', color: 'white', fontSize: '18px' }}>G</div>
                                 <div className="chat-item-details">
-                                    <div className="chat-item-row">
-                                        <span className="chat-item-title">{g.name}</span>
-                                        {last && <span className="chat-item-time">{fmtTime(last.timestamp)}</span>}
-                                    </div>
-                                    <div className="chat-item-row">
-                                        <span className="chat-item-preview">
-                                            {last ? (last.isImage ? '📷 Photo' : (last.deletedForEveryone ? '🚫 Deleted' : last.text)) : `${g.members.length} members`}
-                                        </span>
-                                        {unread > 0 && <div className="unread-badge">{unread > 99 ? '99+' : unread}</div>}
-                                    </div>
+                                    <span className="chat-item-title">{g.name}</span>
+                                    <span className="chat-item-subtitle">{g.members.length} members</span>
                                 </div>
+                                {gUnread > 0 && <UnreadBadge count={gUnread} />}
                             </div>
                         );
                     })}
 
-                    {/* ── Direct Messages ── */}
-                    <div className="section-label" style={{ marginTop: '6px' }}>Messages</div>
-
-                    {Object.keys(contacts).length === 0 && (
-                        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', padding: '6px 20px' }}>Search a username above to start chatting</p>
-                    )}
-
+                    {/* Direct Messages */}
+                    <div style={{ padding: '10px 15px', color: 'var(--accent)', fontSize: '12px', fontWeight: 'bold' }}>DIRECT MESSAGES</div>
                     {Object.keys(contacts).map(c => {
-                        const unread = unreadCounts[c] || 0;
+                        const cUnread = unreadCounts[c] || 0;
                         const cPic = contactProfiles?.[c]?.profilePic || null;
-                        const last = lastMessages?.[c];
-                        const isActive = activeChatType === 'direct' && receiverId === c;
-                        const isOnline = isReceiverOnline && receiverId === c;
                         return (
-                            <div key={c} className={`chat-item ${isActive ? 'active' : ''}`} onClick={() => onSelectContact(c)}>
-                                <div
-                                    className="avatar-wrap"
-                                    onClick={e => { e.stopPropagation(); setViewProfile({ name: c, pic: cPic }); }}
-                                >
-                                    <Avatar name={c} pic={cPic} size={46} />
-                                    {isOnline && <span className="online-dot" />}
+                            <div
+                                key={c}
+                                className={`chat-item ${activeChatType === 'direct' && receiverId === c ? 'active' : ''}`}
+                                onClick={() => onSelectContact(c)}
+                            >
+                                {/* Clickable avatar ΓåÆ profile viewer */}
+                                <div onClick={(e) => { e.stopPropagation(); setViewProfile({ name: c, pic: cPic }); }}>
+                                    <Avatar name={c} pic={cPic} size={40} />
                                 </div>
                                 <div className="chat-item-details">
-                                    <div className="chat-item-row">
-                                        <span className="chat-item-title" style={{ fontWeight: unread > 0 ? 700 : 600 }}>{c}</span>
-                                        {last && <span className="chat-item-time">{fmtTime(last.timestamp)}</span>}
-                                    </div>
-                                    <div className="chat-item-row">
-                                        <span className="chat-item-preview" style={{ fontWeight: unread > 0 && !isActive ? 600 : 400 }}>
-                                            {last ? (last.isImage ? '📷 Photo' : (last.deletedForEveryone ? '🚫 Deleted' : last.text)) : (isOnline ? '● Online' : 'No messages yet')}
-                                        </span>
-                                        {unread > 0 && <div className="unread-badge">{unread > 99 ? '99+' : unread}</div>}
-                                    </div>
+                                    <span className="chat-item-title" style={{ fontWeight: cUnread > 0 ? '700' : '500' }}>{c}</span>
+                                    <span className="chat-item-subtitle" style={{ color: isReceiverOnline && receiverId === c ? '#00a884' : 'var(--text-secondary)' }}>
+                                        {isReceiverOnline && receiverId === c ? 'ΓùÅ Online' : ''}
+                                    </span>
                                 </div>
+                                {cUnread > 0 && <UnreadBadge count={cUnread} />}
                             </div>
                         );
                     })}
                 </div>
             </div>
 
-            {viewProfile && <ProfileViewer name={viewProfile.name} profilePic={viewProfile.pic} onClose={() => setViewProfile(null)} />}
+            {/* Profile viewer modal */}
+            {viewProfile && (
+                <ProfileViewer
+                    name={viewProfile.name}
+                    profilePic={viewProfile.pic}
+                    onClose={() => setViewProfile(null)}
+                />
+            )}
         </>
     );
 }
 
-/** Avatar — shows image or initials */
+/** Reusable avatar that shows image or initial */
 export function Avatar({ name, pic, size = 40 }) {
-    const initials = (name || '?').charAt(0).toUpperCase();
     return (
-        <div className="avatar" style={{ width: size, height: size, fontSize: size * 0.42 }}>
+        <div className="avatar" style={{ width: size, height: size, fontSize: size * 0.45 }}>
             {pic
                 ? <img src={pic} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
-                : initials
+                : (name || '?').charAt(0).toUpperCase()
             }
         </div>
     );
 }
 
-/** Small icon button for header */
-function IconBtn({ onClick, title, children }) {
+function UnreadBadge({ count }) {
     return (
-        <button
-            onClick={onClick}
-            title={title}
-            style={{
-                background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)',
-                width: '34px', height: '34px', borderRadius: '50%', display: 'flex',
-                alignItems: 'center', justifyContent: 'center', fontSize: '16px',
-                transition: 'background 0.15s, color 0.15s'
-            }}
-            onMouseOver={e => { e.currentTarget.style.background = 'var(--bg-item-hover)'; e.currentTarget.style.color = 'var(--accent)'; }}
-            onMouseOut={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
-        >
-            {children}
-        </button>
+        <div style={{
+            minWidth: '20px', height: '20px', borderRadius: '10px',
+            background: 'var(--accent)', color: 'white',
+            fontSize: '12px', fontWeight: 'bold',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '0 5px', marginLeft: 'auto', flexShrink: 0
+        }}>
+            {count > 99 ? '99+' : count}
+        </div>
     );
-}
-
-/** Format timestamp to short string */
-function fmtTime(ts) {
-    if (!ts) return '';
-    const d = new Date(ts);
-    const now = new Date();
-    const diffDays = Math.floor((now - d) / 86400000);
-    if (diffDays === 0) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return d.toLocaleDateString([], { weekday: 'short' });
-    return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }

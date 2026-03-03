@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+﻿import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { io } from 'socket.io-client';
 import {
@@ -16,33 +16,33 @@ const API_URL = 'http://127.0.0.1:3000';
 
 export default function App() {
 
-  // ── Auth ──────────────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Auth ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const [userId, setUserId] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [token, setToken] = useState(null);
   const [myKeys, setMyKeys] = useState(null);
   const [sessionRestored, setSessionRestored] = useState(false);
 
-  // ── Profile & Privacy ─────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Profile & Privacy ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const [profilePic, setProfilePic] = useState(null);
   const [privacySettings, setPrivacySettings] = useState({ readReceipts: 'everyone', onlineStatus: 'everyone' });
-  // contactProfiles: { username: { profilePic } } — fetched when contacts are loaded
+  // contactProfiles: { username: { profilePic } } ΓÇö fetched when contacts are loaded
   const [contactProfiles, setContactProfiles] = useState({});
 
-  // ── Theme ─────────────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Theme ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
   }, [theme]);
 
-  // ── Auth form ─────────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Auth form ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const [isRegistering, setIsRegistering] = useState(false);
   const [password, setPassword] = useState('');
   const [usernameStatus, setUsernameStatus] = useState(null);
   const [authError, setAuthError] = useState('');
 
-  // ── Chat ──────────────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Chat ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const [socket, setSocket] = useState(null);
   const [receiverId, setReceiverId] = useState('');
   const [receiverKey, setReceiverKey] = useState('');
@@ -52,19 +52,19 @@ export default function App() {
   const [selectedMessageId, setSelectedMessageId] = useState(null);
   const [newChatUser, setNewChatUser] = useState('');
 
-  // ── Contacts / Groups ─────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Contacts / Groups ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const [contacts, setContacts] = useState({});
   const [groups, setGroups] = useState([]);
   const [activeChatType, setActiveChatType] = useState('direct');
   const [activeGroupId, setActiveGroupId] = useState('');
   const [unreadCounts, setUnreadCounts] = useState({});
 
-  // ── UI Panels ─────────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ UI Panels ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [singleViewNext, setSingleViewNext] = useState(false); // burn-after-reading toggle
 
-  // ── Refs ──────────────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Refs ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const currentReceiverRef = useRef(receiverId);
   useEffect(() => { currentReceiverRef.current = receiverId; }, [receiverId]);
 
@@ -76,15 +76,15 @@ export default function App() {
 
   const bottomRef = useRef(null);
 
-  // ── Auto scroll ───────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Auto scroll ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatLog]);
 
-  // ── Persist chat ──────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Persist chat ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   useEffect(() => {
     if (userId && chatLog.length > 0) localStorage.setItem(`chat_${userId}`, JSON.stringify(chatLog));
   }, [chatLog, userId]);
 
-  // ── Username availability ─────────────────────────────────────────────────
+  // ΓöÇΓöÇ Username availability ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   useEffect(() => {
     if (!isRegistering || !userId || userId.length < 2) { setUsernameStatus(null); return; }
     const timer = setTimeout(async () => {
@@ -94,7 +94,7 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [userId, isRegistering]);
 
-  // ── Read receipts on chat change ──────────────────────────────────────────
+  // ΓöÇΓöÇ Read receipts on chat change ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   useEffect(() => {
     if (!socket) return;
     let updated = false;
@@ -115,7 +115,7 @@ export default function App() {
     if (updated) setChatLog(newChatLog);
   }, [receiverId, activeGroupId, chatLog, socket]);
 
-  // ── Receiver online status ────────────────────────────────────────────────
+  // ΓöÇΓöÇ Receiver online status ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   useEffect(() => {
     if (!receiverId) { setIsReceiverOnline(false); return; }
     const check = async () => {
@@ -127,7 +127,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, [receiverId]);
 
-  // ── Fetch & cache contact profile pics ───────────────────────────────────
+  // ΓöÇΓöÇ Fetch & cache contact profile pics ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const ensureContactProfile = useCallback(async (username) => {
     if (contactProfiles[username]) return;
     try {
@@ -140,7 +140,7 @@ export default function App() {
     Object.keys(contacts).forEach(c => ensureContactProfile(c));
   }, [contacts]);
 
-  // ── CORE: Socket init (shared by login + session restore) ─────────────────
+  // ΓöÇΓöÇ CORE: Socket init (shared by login + session restore) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const initSocket = useCallback((jwtToken, uid, keys) => {
     const newSocket = io(API_URL, { auth: { token: jwtToken } });
 
@@ -180,7 +180,7 @@ export default function App() {
                 isImage: msg.isImage || false,
                 isSingleView: msg.isSingleView || false,
                 // decrypted text is the base64 for images, or plain text otherwise
-                text: msg.isImage ? '📷 Photo' : text,
+                text: msg.isImage ? '≡ƒô╖ Photo' : text,
                 imageData: msg.isImage ? text : undefined,
                 deletedForEveryone: msg.deletedForEveryone || false,
                 edited: msg.edited || false,
@@ -195,9 +195,9 @@ export default function App() {
     });
 
     newSocket.on('connect_error', () => {
-      sessionStorage.removeItem('session_token');
-      sessionStorage.removeItem('session_userId');
-      sessionStorage.removeItem('session_displayName');
+      localStorage.removeItem('session_token');
+      localStorage.removeItem('session_userId');
+      localStorage.removeItem('session_displayName');
       setToken(null); setSessionRestored(true);
       setAuthError('Session expired. Please log in again.');
     });
@@ -214,7 +214,7 @@ export default function App() {
           isGroup: pkg.isGroup,
           isImage: pkg.isImage || false,
           isSingleView: pkg.isSingleView || false,
-          text: pkg.isImage ? '📷 Photo' : text,
+          text: pkg.isImage ? '≡ƒô╖ Photo' : text,
           imageData: pkg.isImage ? text : undefined,
           isMe: false, hasAckedDelivery: true,
           status: isA ? 'read' : 'delivered', timestamp: new Date().toISOString()
@@ -230,7 +230,7 @@ export default function App() {
 
     newSocket.on('groupCreated', (group) => setGroups(prev => [...prev.filter(g => g.groupId !== group.groupId), group]));
 
-    // ── Message edited by sender ──────────────────────────────────────────────
+    // ΓöÇΓöÇ Message edited by sender ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     newSocket.on('messageEdited', async (data) => {
       try {
         const decrypted = await decryptMessagePayload(
@@ -243,7 +243,7 @@ export default function App() {
       } catch { /* ignore decrypt fail */ }
     });
 
-    // ── Message deleted for everyone ──────────────────────────────────────────
+    // ΓöÇΓöÇ Message deleted for everyone ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     newSocket.on('messageDeleted', (data) => {
       if (data.deletedForEveryone) {
         setChatLog(prev => prev.map(msg =>
@@ -271,16 +271,16 @@ export default function App() {
     return newSocket;
   }, [ensureContactProfile]);
 
-  // ── SESSION RESTORE on refresh ───────────────────────────────────────────
+  // ΓöÇΓöÇ SESSION RESTORE on refresh ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   useEffect(() => {
     const restore = async () => {
-      const savedToken = sessionStorage.getItem('session_token');
-      const savedUserId = sessionStorage.getItem('session_userId');
-      const savedDisplayName = sessionStorage.getItem('session_displayName');
+      const savedToken = localStorage.getItem('session_token');
+      const savedUserId = localStorage.getItem('session_userId');
+      const savedDisplayName = localStorage.getItem('session_displayName');
       if (!savedToken || !savedUserId) { setSessionRestored(true); return; }
 
       const savedKeysRaw = localStorage.getItem(`keys_${savedUserId}`);
-      if (!savedKeysRaw) { sessionStorage.removeItem('session_token'); setSessionRestored(true); return; }
+      if (!savedKeysRaw) { localStorage.removeItem('session_token'); setSessionRestored(true); return; }
 
       try {
         const parsed = JSON.parse(savedKeysRaw);
@@ -299,14 +299,14 @@ export default function App() {
         } catch { }
         initSocket(savedToken, savedUserId, keys);
       } catch {
-        sessionStorage.removeItem('session_token');
+        localStorage.removeItem('session_token');
         setSessionRestored(true);
       }
     };
     restore();
   }, []);
 
-  // ── LOGIN / REGISTER ──────────────────────────────────────────────────────
+  // ΓöÇΓöÇ LOGIN / REGISTER ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const handleLogin = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -332,9 +332,9 @@ export default function App() {
     if (!savedKeysRaw) localStorage.setItem(`keys_${userId}`, JSON.stringify({ publicKey: keys.publicKey, privateKey: keys.privateKey }));
 
     const jwtToken = res.data.token;
-    sessionStorage.setItem('session_token', jwtToken);
-    sessionStorage.setItem('session_userId', userId.trim());
-    sessionStorage.setItem('session_displayName', res.data.displayName);
+    localStorage.setItem('session_token', jwtToken);
+    localStorage.setItem('session_userId', userId.trim());
+    localStorage.setItem('session_displayName', res.data.displayName);
 
     setDisplayName(res.data.displayName);
     setMyKeys(keys);
@@ -344,7 +344,7 @@ export default function App() {
     initSocket(jwtToken, userId.trim(), keys);
   };
 
-  // ── LOGOUT ────────────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ LOGOUT ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const handleLogout = () => {
     if (socket) socket.disconnect();
     ['session_token', 'session_userId', 'session_displayName'].forEach(k => localStorage.removeItem(k));
@@ -357,7 +357,7 @@ export default function App() {
     setProfilePic(null); setContactProfiles({}); setPrivacySettings({ readReceipts: 'everyone', onlineStatus: 'everyone' });
   };
 
-  // ── SETTINGS SAVE ─────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ SETTINGS SAVE ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const handleSaveSettings = async ({ displayName: newName, profilePic: newPic, privacySettings: newPrivacy }) => {
     try {
       const res = await axios.put(`${API_URL}/api/users/${userId}/profile`, {
@@ -366,11 +366,11 @@ export default function App() {
       setDisplayName(res.data.displayName);
       setProfilePic(res.data.profilePic || null);
       setPrivacySettings(res.data.privacySettings);
-      sessionStorage.setItem('session_displayName', res.data.displayName);
+      localStorage.setItem('session_displayName', res.data.displayName);
     } catch { alert('Failed to save settings.'); }
   };
 
-  // ── SEND IMAGE ────────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ SEND IMAGE ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const sendImage = async (base64Data, mimeType) => {
     if (!socket) return;
     if (activeChatType === 'direct' && (!receiverId || !receiverKey)) return;
@@ -392,7 +392,7 @@ export default function App() {
         receiver: activeChatType === 'direct' ? receiverId : activeGroupId,
         isGroup: activeChatType === 'group',
         isImage: true, isSingleView: singleViewNext,
-        imageData: base64Data, text: '📷 Photo',
+        imageData: base64Data, text: '≡ƒô╖ Photo',
         isMe: true, status: 'sent', timestamp: new Date().toISOString(),
       }]);
       socket.emit('sendMessage', {
@@ -408,7 +408,7 @@ export default function App() {
     } catch (err) { console.error('Image encrypt failed', err); }
   };
 
-  // ── EDIT MESSAGE ──────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ EDIT MESSAGE ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const editMessage = async (messageId, newText) => {
     const log = chatLog.find(m => m.messageId === messageId);
     if (!log) return;
@@ -433,14 +433,14 @@ export default function App() {
     } catch (err) { console.error('Edit failed', err); }
   };
 
-  // ── DELETE MESSAGE ────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ DELETE MESSAGE ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const deleteMessage = (messageId, deleteFor, log) => {
     if (deleteFor === 'me') {
-      // Only remove from local state — no broadcast
+      // Only remove from local state ΓÇö no broadcast
       setChatLog(prev => prev.map(m => m.messageId === messageId ? { ...m, deletedForMe: true } : m));
       socket.emit('deleteMessage', { messageId, deleteFor: 'me', receiver: log.receiver, isGroup: log.isGroup });
     } else {
-      // Delete for everyone — broadcast via socket
+      // Delete for everyone ΓÇö broadcast via socket
       setChatLog(prev => prev.map(m => m.messageId === messageId ? { ...m, deletedForEveryone: true } : m));
       socket.emit('deleteMessage', {
         messageId, deleteFor: 'everyone', receiver: log.receiver, isGroup: log.isGroup,
@@ -472,7 +472,7 @@ export default function App() {
     } catch (err) { console.error('Encrypt failed', err); alert('Failed to encrypt message'); }
   };
 
-  // ── CREATE GROUP ──────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ CREATE GROUP ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const handleCreateGroup = async ({ name, members }) => {
     try {
       await axios.post(`${API_URL}/api/groups`, { groupId: self.crypto.randomUUID(), name, members, createdBy: userId });
@@ -480,7 +480,7 @@ export default function App() {
     } catch { alert('Failed to create group.'); }
   };
 
-  // ── START DIRECT CHAT ─────────────────────────────────────────────────────
+  // ΓöÇΓöÇ START DIRECT CHAT ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const startDirectChat = async (e) => {
     e.preventDefault();
     const target = newChatUser.trim().toLowerCase();
@@ -504,22 +504,7 @@ export default function App() {
     return log.isGroup && log.receiver === activeGroupId;
   });
 
-  // lastMessages: per-chat key → last message (for sidebar preview)
-  const lastMessages = useMemo(() => {
-    const map = {};
-    chatLog.forEach(msg => {
-      if (msg.deletedForMe) return;
-      const key = msg.isGroup
-        ? msg.receiver
-        : (msg.isMe ? msg.receiver : msg.from);
-      if (!map[key] || new Date(msg.timestamp) > new Date(map[key].timestamp)) {
-        map[key] = msg;
-      }
-    });
-    return map;
-  }, [chatLog]);
-
-  // ── RENDER ────────────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ RENDER ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   if (!sessionRestored) return null;
 
   if (!token) {
@@ -540,7 +525,7 @@ export default function App() {
     <div className="app-container">
       <Sidebar
         displayName={displayName} userId={userId} profilePic={profilePic}
-        contactProfiles={contactProfiles} lastMessages={lastMessages}
+        contactProfiles={contactProfiles}
         onLogout={handleLogout} onOpenSettings={() => setShowSettings(true)}
         newChatUser={newChatUser} setNewChatUser={setNewChatUser} onStartDirectChat={startDirectChat}
         groups={groups} activeChatType={activeChatType} activeGroupId={activeGroupId} onSelectGroup={selectGroup}
@@ -550,9 +535,8 @@ export default function App() {
 
       {(!receiverId && !activeGroupId) ? (
         <div className="chat-empty">
-          <div className="chat-empty-icon">💬</div>
-          <strong style={{ fontSize: '17px', color: 'var(--text-primary)' }}>Your messages</strong>
-          <span style={{ fontSize: '14px' }}>Select a chat or search a username to start</span>
+          <img src="https://cdn-icons-png.flaticon.com/512/1041/1041916.png" width="80" style={{ opacity: 0.2, marginBottom: '15px' }} alt="chat" />
+          <span>Select a chat to start messaging</span>
         </div>
       ) : (
         <ChatPane
@@ -590,4 +574,3 @@ export default function App() {
     </div>
   );
 }
-
