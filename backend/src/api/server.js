@@ -40,9 +40,24 @@ subscriber.on("message", (channel, message) => {
         data.group.members.forEach(member => {
             io.to(member).emit("groupCreated", data.group);
         });
+    } else if (data.type === "messageEdited") {
+        // Broadcast edit to all participants
+        if (data.isGroup && data.members) {
+            data.members.forEach(member => io.to(member).emit("messageEdited", data));
+        } else {
+            io.to(data.receiver).emit("messageEdited", data);
+            io.to(data.sender).emit("messageEdited", data);
+        }
+    } else if (data.type === "messageDeleted") {
+        // Broadcast delete-for-everyone to all participants
+        if (data.isGroup && data.members) {
+            data.members.forEach(member => io.to(member).emit("messageDeleted", data));
+        } else {
+            io.to(data.receiver).emit("messageDeleted", data);
+            io.to(data.sender).emit("messageDeleted", data);
+        }
     } else {
         if (data.isGroup && data.members) {
-            // Send to everyone in the group except the sender
             data.members.forEach(member => {
                 io.to(member).emit("receiveMessage", data);
             });
@@ -329,13 +344,66 @@ io.on("connection", async (socket) => {
     socket.on("messageRead", async ({ messageId, senderId, isGroup }) => {
         const payload = { type: "statusUpdate", messageId, status: "read", sender: senderId, userId: socket.userId, isGroup };
         await redis.publish("chat", JSON.stringify(payload));
-        // Add to background database worker
         await messageQueue.add("updateStatus", { messageId, status: "read", userId: socket.userId, isGroup });
+    });
+
+    // ── Edit Message (within 10 minutes) ──────────────────────────────────────────
+    socket.on("editMessage", async ({ messageId, newEncryptedMessage, newEncryptedKey, newIv, receiver, isGroup, members }) => {
+        try {
+            const msg = await Message.findOne({ messageId });
+            if (!msg) return;
+            if (msg.sender !== socket.userId) return; // only sender can edit
+            const ageMs = Date.now() - new Date(msg.createdAt).getTime();
+            if (ageMs > 10 * 60 * 1000) {
+                socket.emit("editError", { messageId, error: "Edit window (10 min) has expired." });
+                return;
+            }
+            // Store old ciphertext in history (encrypted), update current
+            msg.editHistory = msg.editHistory || [];
+            msg.editHistory.push({ text: msg.encryptedMessage, editedAt: new Date() });
+            msg.encryptedMessage = newEncryptedMessage;
+            msg.encryptedKey = newEncryptedKey;
+            msg.iv = newIv;
+            msg.edited = true;
+            msg.editedAt = new Date();
+            await msg.save();
+
+            // Broadcast edit to all relevant parties
+            const editPayload = { type: "messageEdited", messageId, newEncryptedMessage, newEncryptedKey, newIv, sender: socket.userId, receiver, isGroup, members };
+            await redis.publish("chat", JSON.stringify(editPayload));
+        } catch (e) {
+            console.error("Edit error:", e);
+        }
+    });
+
+    // ── Delete Message ────────────────────────────────────────────────────────────
+    socket.on("deleteMessage", async ({ messageId, deleteFor, receiver, isGroup, members }) => {
+        try {
+            // deleteFor: 'me' | 'everyone'
+            const msg = await Message.findOne({ messageId });
+            if (!msg) return;
+
+            if (deleteFor === 'everyone') {
+                if (msg.sender !== socket.userId) return; // only sender
+                msg.deletedForEveryone = true;
+                await msg.save();
+                const delPayload = { type: "messageDeleted", messageId, deletedForEveryone: true, sender: socket.userId, receiver, isGroup, members };
+                await redis.publish("chat", JSON.stringify(delPayload));
+            } else {
+                // Delete for me only — add userId to deletedFor array
+                if (!msg.deletedFor.includes(socket.userId)) {
+                    msg.deletedFor.push(socket.userId);
+                    await msg.save();
+                }
+                // No broadcast needed — only local state changes
+            }
+        } catch (e) {
+            console.error("Delete error:", e);
+        }
     });
 
     socket.on("disconnect", async () => {
         console.log(`User disconnected: ${socket.userId}`);
-        // Remove user from online status in Redis
         await redis.del(`online:${socket.userId}`);
     });
 

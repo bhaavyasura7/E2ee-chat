@@ -62,6 +62,7 @@ export default function App() {
   // ── UI Panels ─────────────────────────────────────────────────────────────
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [singleViewNext, setSingleViewNext] = useState(false); // burn-after-reading toggle
 
   // ── Refs ──────────────────────────────────────────────────────────────────
   const currentReceiverRef = useRef(receiverId);
@@ -173,7 +174,19 @@ export default function App() {
               let s = msg.status;
               if (msg.isGroup) { const n = groupObj ? groupObj.members.length : 1; if (rMap.length >= n) s = 'read'; else if (dMap.length > 1) s = 'delivered'; }
               else { s = isA ? 'read' : 'delivered'; }
-              mergedLog.push({ messageId: msg.messageId, from: msg.sender, receiver: msg.receiver, isGroup: msg.isGroup, text, isMe: false, hasAckedDelivery: true, status: s, timestamp: msg.createdAt, deliveredTo: dMap, readBy: rMap });
+              mergedLog.push({
+                messageId: msg.messageId, from: msg.sender, receiver: msg.receiver,
+                isGroup: msg.isGroup,
+                isImage: msg.isImage || false,
+                isSingleView: msg.isSingleView || false,
+                // decrypted text is the base64 for images, or plain text otherwise
+                text: msg.isImage ? '📷 Photo' : text,
+                imageData: msg.isImage ? text : undefined,
+                deletedForEveryone: msg.deletedForEveryone || false,
+                edited: msg.edited || false,
+                isMe: false, hasAckedDelivery: true,
+                status: s, timestamp: msg.createdAt, deliveredTo: dMap, readBy: rMap
+              });
             } catch { }
           }
         }
@@ -196,7 +209,16 @@ export default function App() {
         if (pkg.messageId) newSocket.emit('messageDelivered', { messageId: pkg.messageId, senderId: pkg.sender, isGroup: pkg.isGroup });
         const text = await decryptMessagePayload(pkg, keys.rawKeyPair.privateKey, uid);
         const isA = pkg.isGroup ? pkg.receiver === currentGroupIdRef.current : pkg.sender === currentReceiverRef.current;
-        setChatLog(prev => [...prev, { messageId: pkg.messageId, from: pkg.sender, receiver: pkg.receiver, isGroup: pkg.isGroup, text, isMe: false, hasAckedDelivery: true, status: isA ? 'read' : 'delivered', timestamp: new Date().toISOString() }]);
+        setChatLog(prev => [...prev, {
+          messageId: pkg.messageId, from: pkg.sender, receiver: pkg.receiver,
+          isGroup: pkg.isGroup,
+          isImage: pkg.isImage || false,
+          isSingleView: pkg.isSingleView || false,
+          text: pkg.isImage ? '📷 Photo' : text,
+          imageData: pkg.isImage ? text : undefined,
+          isMe: false, hasAckedDelivery: true,
+          status: isA ? 'read' : 'delivered', timestamp: new Date().toISOString()
+        }]);
         if (!isA) { const k = pkg.isGroup ? pkg.receiver : pkg.sender; setUnreadCounts(prev => ({ ...prev, [k]: (prev[k] || 0) + 1 })); }
         if (pkg.messageId && isA) newSocket.emit('messageRead', { messageId: pkg.messageId, senderId: pkg.sender, isGroup: pkg.isGroup });
         // Cache sender's profile if unknown
@@ -207,6 +229,28 @@ export default function App() {
     });
 
     newSocket.on('groupCreated', (group) => setGroups(prev => [...prev.filter(g => g.groupId !== group.groupId), group]));
+
+    // ── Message edited by sender ──────────────────────────────────────────────
+    newSocket.on('messageEdited', async (data) => {
+      try {
+        const decrypted = await decryptMessagePayload(
+          { encryptedMessage: data.newEncryptedMessage, encryptedKey: data.newEncryptedKey, iv: data.newIv },
+          keys.rawKeyPair.privateKey, uid
+        );
+        setChatLog(prev => prev.map(msg =>
+          msg.messageId === data.messageId ? { ...msg, text: decrypted, edited: true } : msg
+        ));
+      } catch { /* ignore decrypt fail */ }
+    });
+
+    // ── Message deleted for everyone ──────────────────────────────────────────
+    newSocket.on('messageDeleted', (data) => {
+      if (data.deletedForEveryone) {
+        setChatLog(prev => prev.map(msg =>
+          msg.messageId === data.messageId ? { ...msg, deletedForEveryone: true } : msg
+        ));
+      }
+    });
 
     newSocket.on('statusUpdate', (update) => {
       setChatLog(prev => prev.map(msg => {
@@ -326,7 +370,85 @@ export default function App() {
     } catch { alert('Failed to save settings.'); }
   };
 
-  // ── SEND MESSAGE ──────────────────────────────────────────────────────────
+  // ── SEND IMAGE ────────────────────────────────────────────────────────────
+  const sendImage = async (base64Data, mimeType) => {
+    if (!socket) return;
+    if (activeChatType === 'direct' && (!receiverId || !receiverKey)) return;
+    if (activeChatType === 'group' && !activeGroupId) return;
+    try {
+      const msgId = self.crypto.randomUUID();
+      // Encrypt the base64 string just like text
+      let payload;
+      if (activeChatType === 'direct') {
+        payload = await encryptMessagePayload(base64Data, receiverKey.trim());
+      } else {
+        const grp = groups.find(g => g.groupId === activeGroupId);
+        const kr = await axios.post(`${API_URL}/api/users/keys`, { userIds: grp.members });
+        payload = await encryptGroupMessagePayload(base64Data, kr.data);
+      }
+      // Optimistic local update
+      setChatLog(prev => [...prev, {
+        messageId: msgId, from: userId,
+        receiver: activeChatType === 'direct' ? receiverId : activeGroupId,
+        isGroup: activeChatType === 'group',
+        isImage: true, isSingleView: singleViewNext,
+        imageData: base64Data, text: '📷 Photo',
+        isMe: true, status: 'sent', timestamp: new Date().toISOString(),
+      }]);
+      socket.emit('sendMessage', {
+        messageId: msgId, sender: userId,
+        receiver: activeChatType === 'direct' ? receiverId : activeGroupId,
+        isGroup: activeChatType === 'group',
+        isImage: true, isSingleView: singleViewNext,
+        mimeType,
+        members: activeChatType === 'group' ? groups.find(g => g.groupId === activeGroupId).members : undefined,
+        ...payload
+      });
+      setSingleViewNext(false); // reset toggle
+    } catch (err) { console.error('Image encrypt failed', err); }
+  };
+
+  // ── EDIT MESSAGE ──────────────────────────────────────────────────────────
+  const editMessage = async (messageId, newText) => {
+    const log = chatLog.find(m => m.messageId === messageId);
+    if (!log) return;
+    try {
+      let payload;
+      if (!log.isGroup) {
+        payload = await encryptMessagePayload(newText, receiverKey.trim());
+      } else {
+        const grp = groups.find(g => g.groupId === log.receiver);
+        const kr = await axios.post(`${API_URL}/api/users/keys`, { userIds: grp.members });
+        payload = await encryptGroupMessagePayload(newText, kr.data);
+      }
+      // Optimistic update
+      setChatLog(prev => prev.map(m => m.messageId === messageId ? { ...m, text: newText, edited: true } : m));
+      socket.emit('editMessage', {
+        messageId, receiver: log.receiver, isGroup: log.isGroup,
+        members: log.isGroup ? groups.find(g => g.groupId === log.receiver)?.members : undefined,
+        newEncryptedMessage: payload.encryptedMessage,
+        newEncryptedKey: payload.encryptedKey,
+        newIv: payload.iv
+      });
+    } catch (err) { console.error('Edit failed', err); }
+  };
+
+  // ── DELETE MESSAGE ────────────────────────────────────────────────────────
+  const deleteMessage = (messageId, deleteFor, log) => {
+    if (deleteFor === 'me') {
+      // Only remove from local state — no broadcast
+      setChatLog(prev => prev.map(m => m.messageId === messageId ? { ...m, deletedForMe: true } : m));
+      socket.emit('deleteMessage', { messageId, deleteFor: 'me', receiver: log.receiver, isGroup: log.isGroup });
+    } else {
+      // Delete for everyone — broadcast via socket
+      setChatLog(prev => prev.map(m => m.messageId === messageId ? { ...m, deletedForEveryone: true } : m));
+      socket.emit('deleteMessage', {
+        messageId, deleteFor: 'everyone', receiver: log.receiver, isGroup: log.isGroup,
+        members: log.isGroup ? groups.find(g => g.groupId === log.receiver)?.members : undefined
+      });
+    }
+  };
+
   const sendMessage = async (e) => {
     e.preventDefault();
     if (!socket || !message) return;
@@ -424,6 +546,9 @@ export default function App() {
           myPrivacySettings={privacySettings}
           chatLog={filteredLog} selectedMessageId={selectedMessageId} setSelectedMessageId={setSelectedMessageId}
           message={message} setMessage={setMessage} onSendMessage={sendMessage}
+          onSendImage={sendImage}
+          onEditMessage={editMessage}
+          onDeleteMessage={deleteMessage}
           bottomRef={bottomRef}
         />
       )}
