@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { io } from 'socket.io-client';
 import {
@@ -8,6 +8,7 @@ import {
 import AuthScreen from './components/AuthScreen';
 import Sidebar from './components/Sidebar';
 import ChatPane from './components/ChatPane';
+import GroupModal from './components/GroupModal';
 import './App.css';
 
 const API_URL = 'http://127.0.0.1:3000';
@@ -19,6 +20,7 @@ export default function App() {
   const [displayName, setDisplayName] = useState('');
   const [token, setToken] = useState(null);
   const [myKeys, setMyKeys] = useState(null);
+  const [sessionRestored, setSessionRestored] = useState(false); // prevents flash of login screen
 
   // ── Auth form ─────────────────────────────────────────────────────────────
   const [isRegistering, setIsRegistering] = useState(false);
@@ -42,6 +44,9 @@ export default function App() {
   const [activeChatType, setActiveChatType] = useState('direct');
   const [activeGroupId, setActiveGroupId] = useState('');
   const [unreadCounts, setUnreadCounts] = useState({});
+
+  // ── Group Modal ───────────────────────────────────────────────────────────
+  const [showGroupModal, setShowGroupModal] = useState(false);
 
   // ── Refs (stable references for socket callbacks) ─────────────────────────
   const currentReceiverRef = useRef(receiverId);
@@ -69,17 +74,12 @@ export default function App() {
 
   // ── Live username availability (register mode) ────────────────────────────
   useEffect(() => {
-    if (!isRegistering || !userId || userId.length < 2) {
-      setUsernameStatus(null);
-      return;
-    }
+    if (!isRegistering || !userId || userId.length < 2) { setUsernameStatus(null); return; }
     const timer = setTimeout(async () => {
       try {
         const res = await axios.get(`${API_URL}/api/auth/check-username/${userId}`);
         setUsernameStatus(res.data);
-      } catch {
-        setUsernameStatus(null);
-      }
+      } catch { setUsernameStatus(null); }
     }, 500);
     return () => clearTimeout(timer);
   }, [userId, isRegistering]);
@@ -94,9 +94,7 @@ export default function App() {
         updated = true;
         log.hasAckedDelivery = true;
       }
-      const isActive = log.isGroup
-        ? log.receiver === currentGroupIdRef.current
-        : log.from === currentReceiverRef.current;
+      const isActive = log.isGroup ? log.receiver === currentGroupIdRef.current : log.from === currentReceiverRef.current;
       if (!log.isMe && isActive && log.status !== 'read') {
         socket.emit('messageRead', { messageId: log.messageId, senderId: log.from, isGroup: log.isGroup });
         updated = true;
@@ -121,91 +119,36 @@ export default function App() {
     return () => clearInterval(interval);
   }, [receiverId]);
 
-  // ── LOGIN / REGISTER ──────────────────────────────────────────────────────
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setAuthError('');
-
-    if (!userId.trim()) { setAuthError('Please enter a username.'); return; }
-    if (!password) { setAuthError('Please enter a password.'); return; }
-    if (isRegistering && !displayName.trim()) { setAuthError('Please enter a display name.'); return; }
-    if (isRegistering && usernameStatus && !usernameStatus.available) {
-      setAuthError(`Username "${userId}" is already taken. Please choose another.`);
-      return;
-    }
-
-    // Load or generate RSA keys
-    let keys;
-    const savedKeysRaw = localStorage.getItem(`keys_${userId}`);
-    try {
-      if (savedKeysRaw) {
-        const parsed = JSON.parse(savedKeysRaw);
-        const privateCryptoKey = await importRSAPrivateKey(parsed.privateKey);
-        keys = { publicKey: parsed.publicKey, privateKey: parsed.privateKey, rawKeyPair: { privateKey: privateCryptoKey } };
-      } else {
-        keys = await generateRSAKeyPair();
-      }
-    } catch {
-      setAuthError('Failed to prepare encryption keys. Please try again.');
-      return;
-    }
-
-    // Call backend
-    let res;
-    try {
-      res = await axios.post(`${API_URL}/api/auth/login`, {
-        userId: userId.trim(),
-        displayName: displayName.trim() || userId.trim(),
-        publicKey: keys.publicKey,
-        password,
-        isRegistering
-      });
-    } catch (err) {
-      setAuthError(err.response?.data?.error || 'Authentication failed. Check your connection.');
-      return;
-    }
-
-    // Persist keys only after successful auth
-    if (!savedKeysRaw) {
-      localStorage.setItem(`keys_${userId}`, JSON.stringify({
-        publicKey: keys.publicKey,
-        privateKey: keys.privateKey
-      }));
-    }
-
-    const jwtToken = res.data.token;
-    setDisplayName(res.data.displayName);
-    setMyKeys(keys);
-    setToken(jwtToken);
-
+  // ── CORE: Socket setup (shared by login + session restore) ────────────────
+  const initSocket = useCallback((jwtToken, uid, keys, storedDisplayName) => {
     const newSocket = io(API_URL, { auth: { token: jwtToken } });
 
     newSocket.on('connect', async () => {
-      newSocket.emit('registerPublicKey', { userId, publicKey: keys.publicKey });
+      newSocket.emit('registerPublicKey', { userId: uid, publicKey: keys.publicKey });
 
-      const savedContacts = localStorage.getItem(`contacts_${userId}`);
+      const savedContacts = localStorage.getItem(`contacts_${uid}`);
       if (savedContacts) setContacts(JSON.parse(savedContacts));
 
       try {
-        const groupRes = await axios.get(`${API_URL}/api/users/${userId}/groups`);
+        const groupRes = await axios.get(`${API_URL}/api/users/${uid}/groups`);
         setGroups(groupRes.data);
       } catch { /* non-fatal */ }
 
       // Load local + offline messages
       let mergedLog = [];
-      const savedLog = localStorage.getItem(`chat_${userId}`);
+      const savedLog = localStorage.getItem(`chat_${uid}`);
       if (savedLog) { try { mergedLog = JSON.parse(savedLog); } catch { mergedLog = []; } }
 
       try {
-        const dbRes = await axios.get(`${API_URL}/api/messages?userId=${userId}`);
+        const dbRes = await axios.get(`${API_URL}/api/messages?userId=${uid}`);
         for (const msg of dbRes.data) {
           if (mergedLog.find(l => l.messageId === msg.messageId)) continue;
-          if (msg.receiver === userId || msg.isGroup) {
+          if (msg.receiver === uid || msg.isGroup) {
             try {
               newSocket.emit('messageDelivered', { messageId: msg.messageId, senderId: msg.sender, isGroup: msg.isGroup });
               const text = await decryptMessagePayload(
                 { encryptedMessage: msg.encryptedMessage, encryptedKey: msg.encryptedKey, iv: msg.iv },
-                keys.rawKeyPair.privateKey, userId
+                keys.rawKeyPair.privateKey, uid
               );
               const isActive = msg.isGroup ? msg.receiver === currentGroupIdRef.current : msg.sender === currentReceiverRef.current;
               if (isActive) newSocket.emit('messageRead', { messageId: msg.messageId, senderId: msg.sender, isGroup: msg.isGroup });
@@ -217,9 +160,7 @@ export default function App() {
                 const needed = groupObj ? groupObj.members.length : 1;
                 if (rMap.length >= needed) retroStatus = 'read';
                 else if (dMap.length > 1 || rMap.length > 1) retroStatus = 'delivered';
-              } else {
-                retroStatus = isActive ? 'read' : 'delivered';
-              }
+              } else { retroStatus = isActive ? 'read' : 'delivered'; }
 
               mergedLog.push({
                 messageId: msg.messageId, from: msg.sender, receiver: msg.receiver,
@@ -230,37 +171,35 @@ export default function App() {
           }
         }
       } catch { /* non-fatal */ }
-
       setChatLog([...mergedLog]);
     });
 
     newSocket.on('connect_error', (err) => {
-      setAuthError('Socket connection failed: ' + err.message);
+      // If session restore fails (expired token), clear session and show login
+      localStorage.removeItem('session_token');
+      localStorage.removeItem('session_userId');
+      localStorage.removeItem('session_displayName');
       setToken(null);
+      setSessionRestored(true);
+      setAuthError('Session expired. Please log in again.');
     });
 
     newSocket.on('receiveMessage', async (pkg) => {
       try {
-        if (pkg.sender === userId) return;
-        if (pkg.receiver !== userId && !pkg.isGroup) return;
-
+        if (pkg.sender === uid) return;
+        if (pkg.receiver !== uid && !pkg.isGroup) return;
         if (pkg.messageId) newSocket.emit('messageDelivered', { messageId: pkg.messageId, senderId: pkg.sender, isGroup: pkg.isGroup });
-
-        const text = await decryptMessagePayload(pkg, keys.rawKeyPair.privateKey, userId);
+        const text = await decryptMessagePayload(pkg, keys.rawKeyPair.privateKey, uid);
         const isActive = pkg.isGroup ? pkg.receiver === currentGroupIdRef.current : pkg.sender === currentReceiverRef.current;
-
         setChatLog(prev => [...prev, {
           messageId: pkg.messageId, from: pkg.sender, receiver: pkg.receiver,
           isGroup: pkg.isGroup, text, isMe: false, hasAckedDelivery: true,
-          status: isActive ? 'read' : 'delivered',
-          timestamp: new Date().toISOString()
+          status: isActive ? 'read' : 'delivered', timestamp: new Date().toISOString()
         }]);
-
         if (!isActive) {
           const key = pkg.isGroup ? pkg.receiver : pkg.sender;
           setUnreadCounts(prev => ({ ...prev, [key]: (prev[key] || 0) + 1 }));
         }
-
         if (pkg.messageId && isActive) newSocket.emit('messageRead', { messageId: pkg.messageId, senderId: pkg.sender, isGroup: pkg.isGroup });
       } catch {
         setChatLog(prev => [...prev, { messageId: pkg.messageId, from: pkg.sender, text: '[Encrypted - Could not decrypt]', isMe: false, error: true }]);
@@ -289,17 +228,120 @@ export default function App() {
     });
 
     setSocket(newSocket);
+    return newSocket;
+  }, []);
+
+  // ── SESSION RESTORE on page refresh ──────────────────────────────────────
+  useEffect(() => {
+    const restoreSession = async () => {
+      const savedToken = localStorage.getItem('session_token');
+      const savedUserId = localStorage.getItem('session_userId');
+      const savedDisplayName = localStorage.getItem('session_displayName');
+
+      if (!savedToken || !savedUserId) {
+        setSessionRestored(true); // nothing to restore, show login
+        return;
+      }
+
+      // Load RSA keys
+      const savedKeysRaw = localStorage.getItem(`keys_${savedUserId}`);
+      if (!savedKeysRaw) {
+        localStorage.removeItem('session_token');
+        setSessionRestored(true);
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(savedKeysRaw);
+        const privateCryptoKey = await importRSAPrivateKey(parsed.privateKey);
+        const keys = { publicKey: parsed.publicKey, privateKey: parsed.privateKey, rawKeyPair: { privateKey: privateCryptoKey } };
+
+        setUserId(savedUserId);
+        setDisplayName(savedDisplayName || savedUserId);
+        setMyKeys(keys);
+        setToken(savedToken);
+        setSessionRestored(true);
+        initSocket(savedToken, savedUserId, keys, savedDisplayName);
+      } catch {
+        localStorage.removeItem('session_token');
+        setSessionRestored(true); // fallback to login
+      }
+    };
+    restoreSession();
+  }, []); // runs once on mount
+
+  // ── LOGIN / REGISTER ──────────────────────────────────────────────────────
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    if (!userId.trim()) { setAuthError('Please enter a username.'); return; }
+    if (!password) { setAuthError('Please enter a password.'); return; }
+    if (isRegistering && !displayName.trim()) { setAuthError('Please enter a display name.'); return; }
+    if (isRegistering && usernameStatus && !usernameStatus.available) {
+      setAuthError(`Username "${userId}" is already taken. Please choose another.`);
+      return;
+    }
+
+    // Load or generate RSA keys
+    let keys;
+    const savedKeysRaw = localStorage.getItem(`keys_${userId}`);
+    try {
+      if (savedKeysRaw) {
+        const parsed = JSON.parse(savedKeysRaw);
+        const privateCryptoKey = await importRSAPrivateKey(parsed.privateKey);
+        keys = { publicKey: parsed.publicKey, privateKey: parsed.privateKey, rawKeyPair: { privateKey: privateCryptoKey } };
+      } else {
+        keys = await generateRSAKeyPair();
+      }
+    } catch {
+      setAuthError('Failed to prepare encryption keys. Please try again.');
+      return;
+    }
+
+    let res;
+    try {
+      res = await axios.post(`${API_URL}/api/auth/login`, {
+        userId: userId.trim(), displayName: displayName.trim() || userId.trim(),
+        publicKey: keys.publicKey, password, isRegistering
+      });
+    } catch (err) {
+      setAuthError(err.response?.data?.error || 'Authentication failed. Check your connection.');
+      return;
+    }
+
+    // Persist keys only after successful auth
+    if (!savedKeysRaw) {
+      localStorage.setItem(`keys_${userId}`, JSON.stringify({ publicKey: keys.publicKey, privateKey: keys.privateKey }));
+    }
+
+    const jwtToken = res.data.token;
+    const dName = res.data.displayName;
+
+    // Save session to localStorage so refresh keeps user logged in
+    localStorage.setItem('session_token', jwtToken);
+    localStorage.setItem('session_userId', userId.trim());
+    localStorage.setItem('session_displayName', dName);
+
+    setDisplayName(dName);
+    setMyKeys(keys);
+    setToken(jwtToken);
+    initSocket(jwtToken, userId.trim(), keys, dName);
   };
 
   // ── LOGOUT ────────────────────────────────────────────────────────────────
   const handleLogout = () => {
     if (socket) socket.disconnect();
+    // Clear session from localStorage
+    localStorage.removeItem('session_token');
+    localStorage.removeItem('session_userId');
+    localStorage.removeItem('session_displayName');
+    // Reset all state
     setToken(null); setUserId(''); setDisplayName(''); setPassword('');
     setIsRegistering(false); setUsernameStatus(null); setAuthError('');
     setSocket(null); setMyKeys(null); setReceiverId(''); setReceiverKey('');
     setMessage(''); setChatLog([]); setContacts({}); setGroups([]);
     setActiveChatType('direct'); setActiveGroupId(''); setNewChatUser('');
-    setSelectedMessageId(null); setUnreadCounts({});
+    setSelectedMessageId(null); setUnreadCounts({}); setShowGroupModal(false);
   };
 
   // ── SEND MESSAGE ──────────────────────────────────────────────────────────
@@ -308,7 +350,6 @@ export default function App() {
     if (!socket || !message) return;
     if (activeChatType === 'direct' && (!receiverId || !receiverKey)) return;
     if (activeChatType === 'group' && !activeGroupId) return;
-
     try {
       const msgId = self.crypto.randomUUID();
       setChatLog(prev => [...prev, {
@@ -319,7 +360,6 @@ export default function App() {
         deliveredTo: [{ userId, timestamp: new Date() }],
         readBy: [{ userId, timestamp: new Date() }]
       }]);
-
       let payload;
       if (activeChatType === 'direct') {
         const nc = { ...contacts, [receiverId]: receiverKey.trim() };
@@ -331,7 +371,6 @@ export default function App() {
         const keysRes = await axios.post(`${API_URL}/api/users/keys`, { userIds: grp.members });
         payload = await encryptGroupMessagePayload(message, keysRes.data);
       }
-
       socket.emit('sendMessage', {
         messageId: msgId, sender: userId,
         receiver: activeChatType === 'direct' ? receiverId : activeGroupId,
@@ -346,15 +385,13 @@ export default function App() {
     }
   };
 
-  // ── CREATE GROUP ──────────────────────────────────────────────────────────
-  const createGroup = async () => {
-    const name = prompt('Enter Group Name:');
-    if (!name) return;
-    const memberStr = prompt('Enter comma-separated member usernames (include yourself):', userId);
-    if (!memberStr) return;
-    const members = memberStr.split(',').map(m => m.trim().toLowerCase()).filter(Boolean);
+  // ── CREATE GROUP (from modal) ─────────────────────────────────────────────
+  const handleCreateGroup = async ({ name, members }) => {
     try {
-      await axios.post(`${API_URL}/api/groups`, { groupId: self.crypto.randomUUID(), name, members, createdBy: userId });
+      await axios.post(`${API_URL}/api/groups`, {
+        groupId: self.crypto.randomUUID(), name, members, createdBy: userId
+      });
+      setShowGroupModal(false);
     } catch { alert('Failed to create group.'); }
   };
 
@@ -376,28 +413,25 @@ export default function App() {
     }
   };
 
-  // ── SELECT GROUP ──────────────────────────────────────────────────────────
   const selectGroup = (g) => {
-    setActiveChatType('group');
-    setActiveGroupId(g.groupId);
+    setActiveChatType('group'); setActiveGroupId(g.groupId);
     setUnreadCounts(prev => ({ ...prev, [g.groupId]: 0 }));
   };
-
-  // ── SELECT CONTACT ────────────────────────────────────────────────────────
   const selectContact = (c) => {
-    setActiveChatType('direct');
-    setReceiverId(c);
-    setReceiverKey(contacts[c]);
+    setActiveChatType('direct'); setReceiverId(c); setReceiverKey(contacts[c]);
     setUnreadCounts(prev => ({ ...prev, [c]: 0 }));
   };
 
-  // ── FILTERED CHAT LOG ─────────────────────────────────────────────────────
   const filteredLog = chatLog.filter(log => {
     if (activeChatType === 'direct') return !log.isGroup && (log.from === receiverId || (log.isMe && log.receiver === receiverId));
     return log.isGroup && log.receiver === activeGroupId;
   });
 
   // ── RENDER ────────────────────────────────────────────────────────────────
+
+  // While checking localStorage for a saved session, show nothing (prevents flash)
+  if (!sessionRestored) return null;
+
   if (!token) {
     return (
       <AuthScreen
@@ -419,7 +453,7 @@ export default function App() {
         newChatUser={newChatUser} setNewChatUser={setNewChatUser} onStartDirectChat={startDirectChat}
         groups={groups} activeChatType={activeChatType} activeGroupId={activeGroupId} onSelectGroup={selectGroup}
         contacts={contacts} receiverId={receiverId} isReceiverOnline={isReceiverOnline} onSelectContact={selectContact}
-        unreadCounts={unreadCounts} onCreateGroup={createGroup}
+        unreadCounts={unreadCounts} onCreateGroup={() => setShowGroupModal(true)}
       />
 
       {(!receiverId && !activeGroupId) ? (
@@ -434,6 +468,16 @@ export default function App() {
           chatLog={filteredLog} selectedMessageId={selectedMessageId} setSelectedMessageId={setSelectedMessageId}
           message={message} setMessage={setMessage} onSendMessage={sendMessage}
           bottomRef={bottomRef}
+        />
+      )}
+
+      {/* Beautiful Group Creation Modal */}
+      {showGroupModal && (
+        <GroupModal
+          currentUserId={userId}
+          contacts={contacts}
+          onClose={() => setShowGroupModal(false)}
+          onCreate={handleCreateGroup}
         />
       )}
     </div>
