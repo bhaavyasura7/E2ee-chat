@@ -36,6 +36,21 @@ export async function generateRSAKeyPair() {
 }
 
 
+export async function importRSAPrivateKey(base64String) {
+    const binaryDerString = window.atob(base64String);
+    const binaryDer = new Uint8Array([...binaryDerString].map(char => char.charCodeAt(0)));
+    return await window.crypto.subtle.importKey(
+        "pkcs8",
+        binaryDer,
+        {
+            name: "RSA-OAEP",
+            hash: "SHA-256"
+        },
+        true,
+        ["decrypt"]
+    );
+}
+
 // --- 2. AES KEY GENERATION ---
 export async function generateAESKey() {
     return await window.crypto.subtle.generateKey(
@@ -101,13 +116,80 @@ export async function encryptMessagePayload(plainText, receiverPublicKeyBase64) 
 }
 
 
+// --- 3.5. ENCRYPT GROUP MESSAGE (Multi-Encryption Flow) ---
+export async function encryptGroupMessagePayload(plainText, memberPublicKeysObj) {
+    const encoder = new TextEncoder();
+    const encodedText = encoder.encode(plainText);
+
+    // 1. Generate ONE central one-time AES key for this message
+    const aesKey = await generateAESKey();
+
+    // 2. Encrypt the actual message text using this AES key
+    const iv = window.crypto.getRandomValues(new Uint8Array(12));
+    const encryptedContentBuffer = await window.crypto.subtle.encrypt(
+        { name: "AES-GCM", iv: iv },
+        aesKey,
+        encodedText
+    );
+
+    // 3. Export the central AES key so we can wrap it
+    const exportedAESKey = await window.crypto.subtle.exportKey("raw", aesKey);
+
+    // 4. Encrypt the same AES Key multiple times (once for every group member)
+    const encryptedKeysMap = {};
+    for (const [userId, publicKeyBase64] of Object.entries(memberPublicKeysObj)) {
+        try {
+            const binaryDerString = window.atob(publicKeyBase64);
+            const binaryDer = new Uint8Array([...binaryDerString].map(char => char.charCodeAt(0)));
+            const memberRSAPublicKey = await window.crypto.subtle.importKey(
+                "spki", binaryDer, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]
+            );
+
+            // Encrypt the exported AES key with this member's RSA Public Key
+            const encryptedAESKeyBuffer = await window.crypto.subtle.encrypt(
+                { name: "RSA-OAEP" },
+                memberRSAPublicKey,
+                exportedAESKey
+            );
+
+            // Store it in the map for this user
+            encryptedKeysMap[userId] = btoa(String.fromCharCode(...new Uint8Array(encryptedAESKeyBuffer)));
+        } catch (e) {
+            console.error(`Failed to encrypt key for member ${userId}:`, e);
+            // Optionally, we could skip them, but for strict security we might want to throw.
+            // Continuing allows the message to send to valid users even if one key is corrupt.
+        }
+    }
+
+    // 5. Return the Group Payload format
+    return {
+        encryptedMessage: btoa(String.fromCharCode(...new Uint8Array(encryptedContentBuffer))),
+        encryptedKey: encryptedKeysMap, // Now an Object mapping userId -> uniquely encrypted AES key
+        iv: btoa(String.fromCharCode(...iv))
+    };
+}
+
+
 // --- 4. DECRYPT MESSAGE (The Receiver Flow) ---
-export async function decryptMessagePayload(encryptedPackage, myRSAPrivateKeyObject) {
+export async function decryptMessagePayload(encryptedPackage, myRSAPrivateKeyObject, myUserId) {
     const { encryptedMessage, encryptedKey, iv } = encryptedPackage;
+
+    // Determine the correct wrapped AES key to use
+    let myWrappedAESKeyStr;
+    if (typeof encryptedKey === 'object') {
+        // Group Message scenario: fetch my specific wrapped key from the map
+        myWrappedAESKeyStr = encryptedKey[myUserId];
+        if (!myWrappedAESKeyStr) {
+            throw new Error(`My user ID (${myUserId}) was not found in the encryptedKey map for this group message.`);
+        }
+    } else {
+        // Direct Message scenario
+        myWrappedAESKeyStr = encryptedKey;
+    }
 
     // 1. Decode base64 strings back to ArrayBuffers
     const encryptedContentBuffer = new Uint8Array([...window.atob(encryptedMessage)].map(c => c.charCodeAt(0)));
-    const encryptedKeyBuffer = new Uint8Array([...window.atob(encryptedKey)].map(c => c.charCodeAt(0)));
+    const encryptedKeyBuffer = new Uint8Array([...window.atob(myWrappedAESKeyStr)].map(c => c.charCodeAt(0)));
     const ivBuffer = new Uint8Array([...window.atob(iv)].map(c => c.charCodeAt(0)));
 
     // 2. Decrypt the AES key using my RSA Private Key

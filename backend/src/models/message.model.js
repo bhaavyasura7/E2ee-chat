@@ -5,13 +5,16 @@ const messageSchema = new mongoose.Schema({
     sender: String,
     receiver: String,
     encryptedMessage: String,
-    encryptedKey: String,
+    encryptedKey: mongoose.Schema.Types.Mixed, // Object for Groups mapping userId -> their AES key, String for DMs
     iv: String,
+    isGroup: { type: Boolean, default: false },
     status: {
         type: String,
         enum: ["sent", "delivered", "read"],
         default: "sent"
     },
+    deliveredTo: [{ userId: String, timestamp: Date }],
+    readBy: [{ userId: String, timestamp: Date }],
     createdAt: {
         type: Date,
         default: Date.now

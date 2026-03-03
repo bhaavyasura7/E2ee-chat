@@ -1,6 +1,27 @@
+# ── Dependencies ──────────────────────────────────────────────────────────────
 node_modules/
+
+# ── Environment variables (NEVER commit these) ────────────────────────────────
 .env
+.env.local
+.env.*.local
+
+# ── Build outputs ─────────────────────────────────────────────────────────────
 dist/
 build/
+
+# ── System / IDE files ────────────────────────────────────────────────────────
 .DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
 *.log
+npm-debug.log*
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+# (docker-compose.yml and Dockerfiles are intentionally committed)
+
+# ── Lock files (keep package-lock.json for reproducible builds) ───────────────
+# package-lock.json  ← intentionally NOT ignored

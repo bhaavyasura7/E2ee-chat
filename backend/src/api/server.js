@@ -6,11 +6,16 @@ const messageQueue = require("../config/queue");
 
 const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
+
+const SALT_ROUNDS = 10;
 
 const mongoUri = process.env.MONGO_URI || "mongodb://localhost:27017/chat";
 mongoose.connect(mongoUri).catch(err => console.error(err));
 
 const Message = require("../models/message.model");
+const Group = require("../models/group.model");
+const User = require("../models/user.model");
 
 const app = express();
 app.use(express.json()); // Allow JSON body parsing
@@ -31,19 +36,120 @@ subscriber.on("message", (channel, message) => {
     const data = JSON.parse(message);
     if (data.type === "statusUpdate") {
         io.to(data.sender).emit("statusUpdate", data);
+    } else if (data.type === "groupCreated") {
+        data.group.members.forEach(member => {
+            io.to(member).emit("groupCreated", data.group);
+        });
     } else {
-        io.to(data.receiver).emit("receiveMessage", data);
+        if (data.isGroup && data.members) {
+            // Send to everyone in the group except the sender
+            data.members.forEach(member => {
+                io.to(member).emit("receiveMessage", data);
+            });
+        } else {
+            io.to(data.receiver).emit("receiveMessage", data);
+        }
     }
 });
 
-// REST API: Login
-app.post("/api/auth/login", (req, res) => {
-    const { userId } = req.body;
-    if (!userId) return res.status(400).json({ error: "userId is required" });
+// REST API: Check username availability + suggest unique alternatives
+app.get("/api/auth/check-username/:username", async (req, res) => {
+    try {
+        const base = req.params.username.toLowerCase().trim();
+        const existing = await User.findOne({ username: base });
+        if (!existing) {
+            return res.json({ available: true, suggested: base });
+        }
+        // Username taken — find a unique suggestion like base_1, base_2, ...
+        let counter = 1;
+        let suggested = `${base}_${counter}`;
+        while (await User.findOne({ username: suggested })) {
+            counter++;
+            suggested = `${base}_${counter}`;
+        }
+        return res.json({ available: false, suggested });
+    } catch (e) {
+        res.status(500).json({ error: "Server error" });
+    }
+});
 
-    // In a real app, verify passwords against DB here
-    const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: "1d" });
-    res.json({ token, userId });
+// REST API: Login / Register
+app.post("/api/auth/login", async (req, res) => {
+    try {
+        const { userId, displayName, publicKey, password, isRegistering } = req.body;
+
+        // --- Basic validation ---
+        if (!userId) return res.status(400).json({ error: "Username is required." });
+        if (!password) return res.status(400).json({ error: "Password is required." });
+
+        const usernameClean = userId.toLowerCase().trim();
+        const user = await User.findOne({ username: usernameClean });
+
+        // ========== REGISTER FLOW ==========
+        if (isRegistering) {
+            // Block if username already exists
+            if (user) {
+                return res.status(400).json({ error: `Username "${usernameClean}" is already taken. Please choose another.` });
+            }
+            if (!displayName || !publicKey) {
+                return res.status(400).json({ error: "Registration requires a display name and public key." });
+            }
+            // Hash the password before storing — never store plain text
+            const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+            const newUser = await User.create({ username: usernameClean, password: hashedPassword, displayName, publicKey });
+            const token = jwt.sign({ userId: newUser.username }, JWT_SECRET, { expiresIn: "30d" });
+            return res.json({ token, userId: newUser.username, displayName: newUser.displayName, publicKey: newUser.publicKey });
+        }
+
+        // ========== LOGIN FLOW ==========
+        // User must already exist
+        if (!user) {
+            return res.status(404).json({ error: "No account found with that username. Please register first." });
+        }
+
+        // Verify password against bcrypt hash
+        if (!user.password) {
+            // Legacy account with no password — hash and set it now
+            user.password = await bcrypt.hash(password, SALT_ROUNDS);
+            await user.save();
+        } else {
+            // Check if stored password looks like a bcrypt hash
+            const isBcryptHash = user.password.startsWith("$2b$") || user.password.startsWith("$2a$");
+            if (isBcryptHash) {
+                const match = await bcrypt.compare(password, user.password);
+                if (!match) return res.status(401).json({ error: "Incorrect password." });
+            } else {
+                // Legacy plain-text password — verify then upgrade to bcrypt hash
+                if (user.password !== password) return res.status(401).json({ error: "Incorrect password." });
+                user.password = await bcrypt.hash(password, SALT_ROUNDS);
+                await user.save();
+            }
+        }
+
+        // Update public key if it changed (new device / new session keys)
+        if (publicKey && user.publicKey !== publicKey) {
+            user.publicKey = publicKey;
+            await user.save();
+        }
+
+        const token = jwt.sign({ userId: user.username }, JWT_SECRET, { expiresIn: "30d" });
+        return res.json({ token, userId: user.username, displayName: user.displayName, publicKey: user.publicKey });
+
+    } catch (e) {
+        console.error("Auth Error:", e);
+        res.status(500).json({ error: e.message || "Server error" });
+    }
+});
+
+// REST API: Fetch Single User for Direct Messages
+app.get("/api/users/:username", async (req, res) => {
+    try {
+        const user = await User.findOne({ username: req.params.username.toLowerCase() });
+        if (!user) return res.status(404).json({ error: "User not found" });
+        res.json({ username: user.username, displayName: user.displayName, publicKey: user.publicKey });
+    } catch (e) {
+        res.status(500).json({ error: "Server error" });
+    }
 });
 
 // REST API: Check Online Status
@@ -59,17 +165,64 @@ app.get("/api/users/:userId/status", async (req, res) => {
 
 // REST API: Fetch missed messages
 app.get("/api/messages", async (req, res) => {
-    // In a real app we'd verify JWT here, but for now we trust the query param
     const { userId } = req.query;
     if (!userId) return res.status(400).json({ error: "userId required" });
 
     try {
+        const userGroups = await Group.find({ members: userId });
+        const groupIds = userGroups.map(g => g.groupId);
+
         const messages = await Message.find({
-            $or: [{ sender: userId }, { receiver: userId }]
+            $or: [
+                { sender: userId },
+                { receiver: userId },
+                { receiver: { $in: groupIds }, isGroup: true }
+            ]
         }).sort({ createdAt: 1 });
         res.json(messages);
     } catch (err) {
         res.status(500).json({ error: "Failed to fetch messages" });
+    }
+});
+
+// REST API: Create a Group
+app.post("/api/groups", async (req, res) => {
+    try {
+        const { groupId, name, members, createdBy } = req.body;
+        const group = await Group.create({ groupId, name, members, createdBy });
+
+        // Notify all members about the new group via Socket so their UI updates
+        const groupEvent = { type: "groupCreated", group };
+        await redis.publish("chat", JSON.stringify(groupEvent));
+
+        res.json(group);
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: "Failed to create group" });
+    }
+});
+
+// REST API: Fetch user's Groups
+app.get("/api/users/:userId/groups", async (req, res) => {
+    try {
+        const groups = await Group.find({ members: req.params.userId });
+        res.json(groups);
+    } catch (e) {
+        res.status(500).json({ error: "Failed to fetch groups" });
+    }
+});
+
+// REST API: Fetch multiple public keys at once
+app.post("/api/users/keys", async (req, res) => {
+    try {
+        const { userIds } = req.body;
+        const users = await User.find({ username: { $in: userIds.map(u => u.toLowerCase()) } });
+
+        const keys = {};
+        users.forEach(u => keys[u.username] = u.publicKey);
+        res.json(keys);
+    } catch (e) {
+        res.status(500).json({ error: "Failed to fetch keys" });
     }
 });
 
@@ -117,15 +270,19 @@ io.on("connection", async (socket) => {
     });
 
     // Handle delivery receipts
-    socket.on("messageDelivered", async ({ messageId, senderId }) => {
-        await redis.publish("chat", JSON.stringify({ type: "statusUpdate", messageId, status: "delivered", sender: senderId }));
-        await messageQueue.add("updateStatus", { messageId, status: "delivered" });
+    socket.on("messageDelivered", async ({ messageId, senderId, isGroup }) => {
+        const payload = { type: "statusUpdate", messageId, status: "delivered", sender: senderId, userId: socket.userId, isGroup };
+        await redis.publish("chat", JSON.stringify(payload));
+        // Add to background database worker
+        await messageQueue.add("updateStatus", { messageId, status: "delivered", userId: socket.userId, isGroup });
     });
 
     // Handle read receipts
-    socket.on("messageRead", async ({ messageId, senderId }) => {
-        await redis.publish("chat", JSON.stringify({ type: "statusUpdate", messageId, status: "read", sender: senderId }));
-        await messageQueue.add("updateStatus", { messageId, status: "read" });
+    socket.on("messageRead", async ({ messageId, senderId, isGroup }) => {
+        const payload = { type: "statusUpdate", messageId, status: "read", sender: senderId, userId: socket.userId, isGroup };
+        await redis.publish("chat", JSON.stringify(payload));
+        // Add to background database worker
+        await messageQueue.add("updateStatus", { messageId, status: "read", userId: socket.userId, isGroup });
     });
 
     socket.on("disconnect", async () => {
