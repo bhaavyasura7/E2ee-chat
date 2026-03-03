@@ -22,7 +22,7 @@ A **full-stack End-to-End Encrypted chat application** with real-time messaging,
 | Layer | Technology |
 |---|---|
 | Frontend | React + Vite |
-| Styling | Vanilla CSS (WhatsApp-style) |
+| Styling |  CSS |
 | Encryption | Web Crypto API (RSA-OAEP + AES-GCM) |
 | Backend | Node.js + Express + Socket.io |
 | Database | MongoDB (via Mongoose) |
