@@ -98,7 +98,12 @@ app.post("/api/auth/login", async (req, res) => {
             const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
             const newUser = await User.create({ username: usernameClean, password: hashedPassword, displayName, publicKey });
             const token = jwt.sign({ userId: newUser.username }, JWT_SECRET, { expiresIn: "30d" });
-            return res.json({ token, userId: newUser.username, displayName: newUser.displayName, publicKey: newUser.publicKey });
+            return res.json({
+                token, userId: newUser.username, displayName: newUser.displayName,
+                publicKey: newUser.publicKey,
+                profilePic: null,
+                privacySettings: { readReceipts: 'everyone', onlineStatus: 'everyone' }
+            });
         }
 
         // ========== LOGIN FLOW ==========
@@ -133,7 +138,12 @@ app.post("/api/auth/login", async (req, res) => {
         }
 
         const token = jwt.sign({ userId: user.username }, JWT_SECRET, { expiresIn: "30d" });
-        return res.json({ token, userId: user.username, displayName: user.displayName, publicKey: user.publicKey });
+        return res.json({
+            token, userId: user.username, displayName: user.displayName,
+            publicKey: user.publicKey,
+            profilePic: user.profilePic || null,
+            privacySettings: user.privacySettings || { readReceipts: 'everyone', onlineStatus: 'everyone' }
+        });
 
     } catch (e) {
         console.error("Auth Error:", e);
@@ -146,16 +156,54 @@ app.get("/api/users/:username", async (req, res) => {
     try {
         const user = await User.findOne({ username: req.params.username.toLowerCase() });
         if (!user) return res.status(404).json({ error: "User not found" });
-        res.json({ username: user.username, displayName: user.displayName, publicKey: user.publicKey });
+        res.json({
+            username: user.username,
+            displayName: user.displayName,
+            publicKey: user.publicKey,
+            profilePic: user.profilePic || null
+        });
     } catch (e) {
         res.status(500).json({ error: "Server error" });
     }
 });
 
-// REST API: Check Online Status
+// REST API: Update profile (picture + privacy settings)
+app.put("/api/users/:username/profile", async (req, res) => {
+    try {
+        const { username } = req.params;
+        const { profilePic, privacySettings, displayName } = req.body;
+
+        const update = {};
+        if (profilePic !== undefined) update.profilePic = profilePic;
+        if (displayName) update.displayName = displayName;
+        if (privacySettings) update.privacySettings = privacySettings;
+
+        const user = await User.findOneAndUpdate(
+            { username: username.toLowerCase() },
+            { $set: update },
+            { new: true }
+        );
+        if (!user) return res.status(404).json({ error: "User not found" });
+        res.json({
+            username: user.username,
+            displayName: user.displayName,
+            profilePic: user.profilePic || null,
+            privacySettings: user.privacySettings
+        });
+    } catch (e) {
+        res.status(500).json({ error: "Server error" });
+    }
+});
+
+// REST API: Check Online Status (respects user's privacy setting)
 app.get("/api/users/:userId/status", async (req, res) => {
     const { userId } = req.params;
     try {
+        // Check privacy setting first
+        const user = await User.findOne({ username: userId.toLowerCase() });
+        if (user && user.privacySettings?.onlineStatus === 'nobody') {
+            return res.json({ online: false }); // hidden by privacy
+        }
         const socketId = await redis.get(`online:${userId}`);
         res.json({ online: !!socketId });
     } catch (err) {

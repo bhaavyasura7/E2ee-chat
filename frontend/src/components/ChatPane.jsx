@@ -1,35 +1,43 @@
 /**
- * ChatPane.jsx
- * The right panel: chat header, messages area, and compose bar.
+ * ChatPane.jsx — right panel: chat header, messages, compose bar
  */
+import { useState } from 'react';
+import { Avatar } from './Sidebar';
+import ProfileViewer from './ProfileViewer';
 
 export default function ChatPane({
     activeChatType, receiverId, activeGroupId,
     groups, groupsRef, isReceiverOnline,
+    receiverProfilePic, myPrivacySettings,
     chatLog, selectedMessageId, setSelectedMessageId,
     message, setMessage, onSendMessage,
     bottomRef,
 }) {
+    const [showProfileViewer, setShowProfileViewer] = useState(false);
     const activeGroup = groups.find(g => g.groupId === activeGroupId);
 
     return (
         <div className="chat-pane">
             {/* Header */}
             <div className="chat-header">
-                <div className="avatar" style={{
-                    backgroundColor: activeChatType === 'direct' ? '#dfe5e7' : '#00a884',
-                    color: activeChatType === 'direct' ? '#54656f' : 'white'
-                }}>
-                    {activeChatType === 'direct' ? receiverId.charAt(0).toUpperCase() : 'G'}
+                <div
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => activeChatType === 'direct' && setShowProfileViewer(true)}
+                    title={activeChatType === 'direct' ? 'View profile' : ''}
+                >
+                    {activeChatType === 'direct'
+                        ? <Avatar name={receiverId} pic={receiverProfilePic} size={40} />
+                        : <div className="avatar" style={{ background: 'linear-gradient(135deg,#00a884,#007a62)', color: '#fff', width: 40, height: 40, fontSize: 18 }}>G</div>
+                    }
                 </div>
                 <div className="header-info">
                     <span className="title">
                         {activeChatType === 'direct' ? receiverId : activeGroup?.name}
                     </span>
-                    <span className="subtitle">
+                    <span className="subtitle" style={{ color: isReceiverOnline ? 'var(--accent)' : 'var(--text-secondary)' }}>
                         {activeChatType === 'direct'
-                            ? (isReceiverOnline ? 'Online' : 'Offline')
-                            : `${activeGroup?.members.length} members`}
+                            ? (isReceiverOnline ? '● Online' : 'Offline')
+                            : `${activeGroup?.members?.length || 0} members`}
                     </span>
                 </div>
             </div>
@@ -44,56 +52,64 @@ export default function ChatPane({
                         setSelectedMessageId={setSelectedMessageId}
                         groups={groups}
                         groupsRef={groupsRef}
+                        showReadReceipts={myPrivacySettings?.readReceipts !== 'nobody'}
                     />
                 ))}
                 <div ref={bottomRef} style={{ height: '10px' }} />
             </div>
 
-            {/* Compose Bar */}
+            {/* Compose */}
             <form className="compose-area" onSubmit={onSendMessage}>
-                <button type="button" style={{ background: 'transparent', color: '#54656f', fontSize: '20px' }}>+</button>
+                <button type="button" style={{ background: 'transparent', color: 'var(--text-secondary)', fontSize: '20px', border: 'none', cursor: 'default' }}>📎</button>
                 <input
                     type="text"
                     placeholder="Type a message..."
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                 />
-                <button type="submit" disabled={!message}>Send</button>
+                <button type="submit" disabled={!message}>Send ›</button>
             </form>
+
+            {/* Contact profile viewer */}
+            {showProfileViewer && activeChatType === 'direct' && (
+                <ProfileViewer
+                    name={receiverId}
+                    profilePic={receiverProfilePic}
+                    onClose={() => setShowProfileViewer(false)}
+                />
+            )}
         </div>
     );
 }
 
-/** Individual message bubble */
-function MessageBubble({ log, selectedMessageId, setSelectedMessageId, groups, groupsRef }) {
+function MessageBubble({ log, selectedMessageId, setSelectedMessageId, groups, groupsRef, showReadReceipts }) {
     return (
         <div
             className={`message ${log.isMe ? 'me' : 'them'} ${log.error ? 'error' : ''}`}
-            onClick={() => {
-                if (log.isMe && log.isGroup) {
-                    setSelectedMessageId(selectedMessageId === log.messageId ? null : log.messageId);
-                }
-            }}
+            onClick={() => { if (log.isMe && log.isGroup) setSelectedMessageId(selectedMessageId === log.messageId ? null : log.messageId); }}
             style={{ cursor: log.isMe && log.isGroup ? 'pointer' : 'default' }}
         >
-            {/* Group sender name */}
+            {/* Group sender label */}
             {!log.isMe && log.isGroup && (
-                <strong style={{ color: '#00a884', display: 'block', marginBottom: '2px', fontSize: '12.5px' }}>
+                <strong style={{ color: 'var(--accent)', display: 'block', marginBottom: '3px', fontSize: '12.5px' }}>
                     {log.from}
                 </strong>
             )}
 
             <span>{log.text}</span>
 
-            {/* Sent message tick/time */}
-            {log.isMe && log.status && (
+            {/* Sent message meta (time + tick) */}
+            {log.isMe && (
                 <div className="message-meta">
-                    {log.timestamp && (
-                        <span>{new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    {log.timestamp && <span>{new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+                    {showReadReceipts && (
+                        <>
+                            {log.status === 'sent' && <span title="Sent">✓</span>}
+                            {log.status === 'delivered' && <span title="Delivered">✓✓</span>}
+                            {log.status === 'read' && <span title="Read" style={{ color: '#53bdeb', fontWeight: 'bold' }}>✓✓</span>}
+                        </>
                     )}
-                    {log.status === 'sent' && '✓'}
-                    {log.status === 'delivered' && '✓✓'}
-                    {log.status === 'read' && <span style={{ color: '#53bdeb', fontWeight: 'bold' }}>✓✓</span>}
+                    {!showReadReceipts && log.status && <span title="Sent">✓</span>}
                 </div>
             )}
 
@@ -104,7 +120,7 @@ function MessageBubble({ log, selectedMessageId, setSelectedMessageId, groups, g
                 </div>
             )}
 
-            {/* Group message tracking popup */}
+            {/* Group message read tracker popup */}
             {selectedMessageId === log.messageId && log.isGroup && (
                 <GroupMessageInfo log={log} groups={groups} groupsRef={groupsRef} />
             )}
@@ -112,47 +128,36 @@ function MessageBubble({ log, selectedMessageId, setSelectedMessageId, groups, g
     );
 }
 
-/** Popup showing read/delivered/pending info for a group message */
 function GroupMessageInfo({ log, groups, groupsRef }) {
-    const groupObj = groups.find(g => g.groupId === log.receiver)
-        || groupsRef.current.find(g => g.groupId === log.receiver);
-    const expectedMembers = groupObj ? groupObj.members.filter(m => m !== log.from) : [];
+    const groupObj = groups.find(g => g.groupId === log.receiver) || groupsRef.current.find(g => g.groupId === log.receiver);
+    const expected = groupObj ? groupObj.members.filter(m => m !== log.from) : [];
     const readIds = (log.readBy || []).map(r => r.userId);
-    const deliveredButNotRead = (log.deliveredTo || []).filter(d => !readIds.includes(d.userId));
-    const notDelivered = expectedMembers.filter(
-        m => !readIds.includes(m) && !(log.deliveredTo || []).some(d => d.userId === m)
-    );
+    const deliveredOnly = (log.deliveredTo || []).filter(d => !readIds.includes(d.userId));
+    const notDelivered = expected.filter(m => !readIds.includes(m) && !(log.deliveredTo || []).some(d => d.userId === m));
 
     return (
-        <div style={{ marginTop: '10px', background: 'rgba(0,0,0,0.05)', padding: '10px', borderRadius: '5px', fontSize: '12px' }}>
-            <strong style={{ display: 'block', marginBottom: '5px' }}>Message Tracking</strong>
-
-            <div style={{ marginTop: '5px' }}>
-                <span style={{ color: '#53bdeb', fontWeight: 'bold' }}>Read: </span>
-                {log.readBy?.length > 0
-                    ? <ul style={{ margin: '2px 0 5px 20px', padding: 0 }}>
-                        {log.readBy.map(r => <li key={r.userId}>{r.userId} ({new Date(r.timestamp).toLocaleTimeString()})</li>)}
-                    </ul>
-                    : <span style={{ marginLeft: '5px' }}>None</span>}
-            </div>
-
-            <div style={{ marginTop: '5px' }}>
-                <span style={{ fontWeight: 'bold', color: '#666' }}>Delivered: </span>
-                {deliveredButNotRead.length > 0
-                    ? <ul style={{ margin: '2px 0 5px 20px', padding: 0 }}>
-                        {deliveredButNotRead.map(d => <li key={d.userId}>{d.userId} ({new Date(d.timestamp).toLocaleTimeString()})</li>)}
-                    </ul>
-                    : <span style={{ marginLeft: '5px' }}>None</span>}
-            </div>
-
+        <div style={{ marginTop: '10px', background: 'rgba(0,0,0,0.06)', padding: '10px', borderRadius: '6px', fontSize: '12px' }}>
+            <strong style={{ display: 'block', marginBottom: '5px', color: 'var(--text-primary)' }}>Message Tracking</strong>
+            <InfoRow label="Read" color="#53bdeb" items={log.readBy} />
+            <InfoRow label="Delivered" color="#667781" items={deliveredOnly} />
             {notDelivered.length > 0 && (
-                <div style={{ marginTop: '5px' }}>
+                <div style={{ marginTop: '4px' }}>
                     <span style={{ fontWeight: 'bold', color: '#f44336' }}>Pending: </span>
-                    <ul style={{ margin: '2px 0 0 20px', padding: 0, color: '#f44336' }}>
-                        {notDelivered.map(m => <li key={m}>{m}</li>)}
-                    </ul>
+                    {notDelivered.join(', ')}
                 </div>
             )}
+        </div>
+    );
+}
+
+function InfoRow({ label, color, items }) {
+    return (
+        <div style={{ marginTop: '4px' }}>
+            <span style={{ fontWeight: 'bold', color }}>{label}: </span>
+            {items?.length > 0
+                ? items.map(i => `${i.userId} (${new Date(i.timestamp).toLocaleTimeString()})`).join(', ')
+                : 'None'
+            }
         </div>
     );
 }
