@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { io } from 'socket.io-client';
 import {
@@ -195,9 +195,9 @@ export default function App() {
     });
 
     newSocket.on('connect_error', () => {
-      localStorage.removeItem('session_token');
-      localStorage.removeItem('session_userId');
-      localStorage.removeItem('session_displayName');
+      sessionStorage.removeItem('session_token');
+      sessionStorage.removeItem('session_userId');
+      sessionStorage.removeItem('session_displayName');
       setToken(null); setSessionRestored(true);
       setAuthError('Session expired. Please log in again.');
     });
@@ -274,13 +274,13 @@ export default function App() {
   // ── SESSION RESTORE on refresh ───────────────────────────────────────────
   useEffect(() => {
     const restore = async () => {
-      const savedToken = localStorage.getItem('session_token');
-      const savedUserId = localStorage.getItem('session_userId');
-      const savedDisplayName = localStorage.getItem('session_displayName');
+      const savedToken = sessionStorage.getItem('session_token');
+      const savedUserId = sessionStorage.getItem('session_userId');
+      const savedDisplayName = sessionStorage.getItem('session_displayName');
       if (!savedToken || !savedUserId) { setSessionRestored(true); return; }
 
       const savedKeysRaw = localStorage.getItem(`keys_${savedUserId}`);
-      if (!savedKeysRaw) { localStorage.removeItem('session_token'); setSessionRestored(true); return; }
+      if (!savedKeysRaw) { sessionStorage.removeItem('session_token'); setSessionRestored(true); return; }
 
       try {
         const parsed = JSON.parse(savedKeysRaw);
@@ -299,7 +299,7 @@ export default function App() {
         } catch { }
         initSocket(savedToken, savedUserId, keys);
       } catch {
-        localStorage.removeItem('session_token');
+        sessionStorage.removeItem('session_token');
         setSessionRestored(true);
       }
     };
@@ -332,9 +332,9 @@ export default function App() {
     if (!savedKeysRaw) localStorage.setItem(`keys_${userId}`, JSON.stringify({ publicKey: keys.publicKey, privateKey: keys.privateKey }));
 
     const jwtToken = res.data.token;
-    localStorage.setItem('session_token', jwtToken);
-    localStorage.setItem('session_userId', userId.trim());
-    localStorage.setItem('session_displayName', res.data.displayName);
+    sessionStorage.setItem('session_token', jwtToken);
+    sessionStorage.setItem('session_userId', userId.trim());
+    sessionStorage.setItem('session_displayName', res.data.displayName);
 
     setDisplayName(res.data.displayName);
     setMyKeys(keys);
@@ -366,7 +366,7 @@ export default function App() {
       setDisplayName(res.data.displayName);
       setProfilePic(res.data.profilePic || null);
       setPrivacySettings(res.data.privacySettings);
-      localStorage.setItem('session_displayName', res.data.displayName);
+      sessionStorage.setItem('session_displayName', res.data.displayName);
     } catch { alert('Failed to save settings.'); }
   };
 
@@ -504,6 +504,21 @@ export default function App() {
     return log.isGroup && log.receiver === activeGroupId;
   });
 
+  // lastMessages: per-chat key → last message (for sidebar preview)
+  const lastMessages = useMemo(() => {
+    const map = {};
+    chatLog.forEach(msg => {
+      if (msg.deletedForMe) return;
+      const key = msg.isGroup
+        ? msg.receiver
+        : (msg.isMe ? msg.receiver : msg.from);
+      if (!map[key] || new Date(msg.timestamp) > new Date(map[key].timestamp)) {
+        map[key] = msg;
+      }
+    });
+    return map;
+  }, [chatLog]);
+
   // ── RENDER ────────────────────────────────────────────────────────────────
   if (!sessionRestored) return null;
 
@@ -525,7 +540,7 @@ export default function App() {
     <div className="app-container">
       <Sidebar
         displayName={displayName} userId={userId} profilePic={profilePic}
-        contactProfiles={contactProfiles}
+        contactProfiles={contactProfiles} lastMessages={lastMessages}
         onLogout={handleLogout} onOpenSettings={() => setShowSettings(true)}
         newChatUser={newChatUser} setNewChatUser={setNewChatUser} onStartDirectChat={startDirectChat}
         groups={groups} activeChatType={activeChatType} activeGroupId={activeGroupId} onSelectGroup={selectGroup}
@@ -535,14 +550,17 @@ export default function App() {
 
       {(!receiverId && !activeGroupId) ? (
         <div className="chat-empty">
-          <img src="https://cdn-icons-png.flaticon.com/512/1041/1041916.png" width="80" style={{ opacity: 0.2, marginBottom: '15px' }} alt="chat" />
-          <span>Select a chat to start messaging</span>
+          <div className="chat-empty-icon">💬</div>
+          <strong style={{ fontSize: '17px', color: 'var(--text-primary)' }}>Your messages</strong>
+          <span style={{ fontSize: '14px' }}>Select a chat or search a username to start</span>
         </div>
       ) : (
         <ChatPane
           activeChatType={activeChatType} receiverId={receiverId} activeGroupId={activeGroupId}
           groups={groups} groupsRef={groupsRef} isReceiverOnline={isReceiverOnline}
           receiverProfilePic={contactProfiles[receiverId]?.profilePic || null}
+          myProfilePic={profilePic}
+          myUserId={userId}
           myPrivacySettings={privacySettings}
           chatLog={filteredLog} selectedMessageId={selectedMessageId} setSelectedMessageId={setSelectedMessageId}
           message={message} setMessage={setMessage} onSendMessage={sendMessage}
@@ -572,3 +590,4 @@ export default function App() {
     </div>
   );
 }
+
